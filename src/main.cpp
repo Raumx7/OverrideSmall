@@ -74,6 +74,12 @@ void move_claw() {
     claw_to(claw_is_down() ? TARGET_DEG : 0.0);
 }
 
+// Intake mode: send both arm (lift) motors back to where they were at power-on
+void arm_to_start() {
+    arm_l.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
+    arm_r.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
+}
+
 int clamp(int val) {
     if (val > MAX_DRIVE_SPEED) return MAX_DRIVE_SPEED;
     if (val < -MAX_DRIVE_SPEED) return -MAX_DRIVE_SPEED;
@@ -89,11 +95,18 @@ int main() {
 
     claw_lift.setPosition(0.0, rotationUnits::deg);
 
+    // The arm's power-on position is its starting position (0 deg)
+    arm_l.setPosition(0.0, rotationUnits::deg);
+    arm_r.setPosition(0.0, rotationUnits::deg);
+
     Controller.ButtonX.pressed(move_claw);
 
     // Intake mode (ButtonY toggles it): claw down, intake and claw running
     bool intake_mode = false;
     bool y_was_pressed = false;
+
+    // True while intake mode is bringing the arm back to its starting position
+    bool arm_returning = false;
 
     while(true) {
 
@@ -115,25 +128,34 @@ int main() {
         bool y_pressed = Controller.ButtonY.pressing();
         if (y_pressed && !y_was_pressed) {
             intake_mode = !intake_mode;
-            if (intake_mode && !claw_is_down())
-                claw_to(0.0);
+            if (intake_mode)
+            {
+                if (!claw_is_down())
+                    claw_to(0.0);
+                arm_to_start();
+                arm_returning = true;
+            }
         }
         y_was_pressed = y_pressed;
 
         // Arm: R1 up, L1 down
+        // Pressing R1 or L1 cancels the automatic return.
         if (Controller.ButtonR1.pressing())
         {
+            arm_returning = false;
             arm_l.spin(directionType::fwd, MAX_SPEED, velocityUnits::pct);
             arm_r.spin(directionType::fwd, MAX_SPEED, velocityUnits::pct);
         }
 
         else if (Controller.ButtonL1.pressing())
         {
+            arm_returning = false;
             arm_l.spin(directionType::fwd, -MAX_SPEED, velocityUnits::pct);
             arm_r.spin(directionType::fwd, -MAX_SPEED, velocityUnits::pct);
         }
 
-        else
+        // Don't stop the arm while it is returning, or the return would be cancelled
+        else if (!arm_returning)
         {
             arm_l.stop();
             arm_r.stop();
