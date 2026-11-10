@@ -1,7 +1,12 @@
-.vscode
+*.v5cpp
 
-/bin
-/build
-vex
-
+-build/
+build/
+bin/
+obj/
+vex/
+.vscode/
 makefile
+
+.DS_Store
+Thumbs.db
