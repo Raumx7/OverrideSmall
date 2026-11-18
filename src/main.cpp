@@ -21,6 +21,12 @@ constexpr int MAX_SPEED = 60;
 constexpr double GEAR_RATIO = 48.0 / 12.0;
 constexpr double TARGET_DEG = GEAR_RATIO * 90.0;
 
+// The claw counts as "down" when it is within this many motor degrees of 0
+constexpr double CLAW_DOWN_TOLERANCE = TARGET_DEG * 0.1;
+
+bool intake_mode = false;
+bool arm_returning = false;
+
 // Brain
 brain Brain;
 
@@ -52,9 +58,6 @@ motor intake = motor(PORT18);
 motor claw_intake = motor(PORT9);
 motor claw_lift = motor(PORT2);
 
-// The claw counts as "down" when it is within this many motor degrees of 0
-constexpr double CLAW_DOWN_TOLERANCE = TARGET_DEG * 0.1;
-
 bool claw_is_down() {
     return claw_lift.position(rotationUnits::deg) <= CLAW_DOWN_TOLERANCE;
 }
@@ -80,6 +83,19 @@ void arm_to_start() {
     arm_r.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
 }
 
+// Callback ButtonY: toggle automatic intake mode
+void toggle_intake() {
+    intake_mode = !intake_mode;
+
+    if (intake_mode) {
+        if (!claw_is_down()) {
+            claw_to(0.0); 
+        }
+        arm_to_start();
+        arm_returning = true;
+    }
+}
+
 int clamp(int val) {
     if (val > MAX_DRIVE_SPEED) return MAX_DRIVE_SPEED;
     if (val < -MAX_DRIVE_SPEED) return -MAX_DRIVE_SPEED;
@@ -102,11 +118,7 @@ int main() {
     Controller.ButtonX.pressed(move_claw);
 
     // Intake mode (ButtonY toggles it): claw down, intake and claw running
-    bool intake_mode = false;
-    bool y_was_pressed = false;
-
-    // True while intake mode is bringing the arm back to its starting position
-    bool arm_returning = false;
+    Controller.ButtonY.pressed(toggle_intake);
 
     while(true) {
 
@@ -123,20 +135,6 @@ int main() {
 
         motors_l.spin(directionType::fwd, power_l, velocityUnits::pct);
         motors_r.spin(directionType::fwd, power_r, velocityUnits::pct);
-        
-        // ButtonY: toggle intake mode (acts once per press, not while held)
-        bool y_pressed = Controller.ButtonY.pressing();
-        if (y_pressed && !y_was_pressed) {
-            intake_mode = !intake_mode;
-            if (intake_mode)
-            {
-                if (!claw_is_down())
-                    claw_to(0.0);
-                arm_to_start();
-                arm_returning = true;
-            }
-        }
-        y_was_pressed = y_pressed;
 
         // Arm: R1 up, R2 down
         // Pressing R1 or R2 cancels the automatic return.
@@ -186,7 +184,6 @@ int main() {
 
         else
             claw_intake.stop();
-
 
         wait(30, timeUnits::msec);
     }
