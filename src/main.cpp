@@ -49,8 +49,8 @@ motor lift_l = motor(PORT10);
 motor lift_r = motor(PORT1, true);
 
 // Drivetrain motor groups
-motor_group motors_l = motor_group(mtr_l1, mtr_l2);
-motor_group motors_r = motor_group(mtr_r1, mtr_r2);
+motor_group motors_l = motor_group(mtr_l1, mtr_l2, mtr_l3);
+motor_group motors_r = motor_group(mtr_r1, mtr_r2, mtr_r3);
 
 // Lift motor group
 motor_group lift(lift_l, lift_r);
