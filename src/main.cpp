@@ -24,8 +24,9 @@ constexpr double TARGET_DEG = GEAR_RATIO * 90.0;
 // The claw counts as "down" when it is within this many motor degrees of 0
 constexpr double CLAW_DOWN_TOLERANCE = TARGET_DEG * 0.1;
 
+// Control the intake and claw returning states
 bool intake_mode = false;
-bool arm_returning = false;
+bool lift_returning = false;
 
 // Brain
 brain Brain;
@@ -43,13 +44,16 @@ motor mtr_r1 = motor(PORT11);
 motor mtr_r2 = motor(PORT12);
 motor mtr_r3 = motor(PORT3, true);
 
-// Motor groups
+// Lift motors
+motor lift_l = motor(PORT10);
+motor lift_r = motor(PORT1, true);
+
+// Drivetrain motor groups
 motor_group motors_l = motor_group(mtr_l1, mtr_l2);
 motor_group motors_r = motor_group(mtr_r1, mtr_r2);
 
-// Arm motors
-motor arm_l = motor(PORT10);
-motor arm_r = motor(PORT1, true);
+// Lift motor group
+motor_group lift(lift_l, lift_r);
 
 // In-take motor
 motor intake = motor(PORT18);
@@ -71,16 +75,8 @@ void claw_to(double target_deg) {
     );
 }
 
-// ButtonX: raise the claw if it is down, lower it otherwise.
-// Uses the real position, so it stays correct after intake mode lowers the claw.
 void move_claw() {
     claw_to(claw_is_down() ? TARGET_DEG : 0.0);
-}
-
-// Intake mode: send both arm (lift) motors back to where they were at power-on
-void arm_to_start() {
-    arm_l.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
-    arm_r.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
 }
 
 // Callback ButtonY: toggle automatic intake mode
@@ -91,8 +87,8 @@ void toggle_intake() {
         if (!claw_is_down()) {
             claw_to(0.0); 
         }
-        arm_to_start();
-        arm_returning = true;
+        lift.spinToPosition(0.0, rotationUnits::deg, MAX_SPEED, velocityUnits::pct, false);
+        lift_returning = true;
     }
 }
 
@@ -104,20 +100,18 @@ int clamp(int val) {
 
 int main() {
 
-    arm_l.setBrake(brakeType::hold);
-    arm_r.setBrake(brakeType::hold);
+    lift.setStopping(brakeType::hold);
 
     claw_lift.setBrake(brakeType::hold);
-
     claw_lift.setPosition(0.0, rotationUnits::deg);
 
     // The arm's power-on position is its starting position (0 deg)
-    arm_l.setPosition(0.0, rotationUnits::deg);
-    arm_r.setPosition(0.0, rotationUnits::deg);
+    lift.setPosition(0.0, rotationUnits::deg);
 
+    // Claw down or up (0° | 90°)
     Controller.ButtonX.pressed(move_claw);
 
-    // Intake mode (ButtonY toggles it): claw down, intake and claw running
+    // Intake mode (ButtonY toggles it): claw down, intake/claw_intake running and lift dowm
     Controller.ButtonY.pressed(toggle_intake);
 
     while(true) {
@@ -136,28 +130,22 @@ int main() {
         motors_l.spin(directionType::fwd, power_l, velocityUnits::pct);
         motors_r.spin(directionType::fwd, power_r, velocityUnits::pct);
 
-        // Arm: R1 up, R2 down
-        // Pressing R1 or R2 cancels the automatic return.
+        // Pressing R1 or R2 cancels the automatic lift return.
         if (Controller.ButtonR1.pressing())
         {
-            arm_returning = false;
-            arm_l.spin(directionType::fwd, MAX_SPEED, velocityUnits::pct);
-            arm_r.spin(directionType::fwd, MAX_SPEED, velocityUnits::pct);
+            lift_returning = false;
+            lift.spin(directionType::fwd, MAX_SPEED, velocityUnits::pct);
         }
 
         else if (Controller.ButtonR2.pressing())
         {
-            arm_returning = false;
-            arm_l.spin(directionType::fwd, -MAX_SPEED, velocityUnits::pct);
-            arm_r.spin(directionType::fwd, -MAX_SPEED, velocityUnits::pct);
+            lift_returning = false;
+            lift.spin(directionType::fwd, -MAX_SPEED, velocityUnits::pct);
         }
 
         // Don't stop the arm while it is returning, or the return would be cancelled
-        else if (!arm_returning)
-        {
-            arm_l.stop();
-            arm_r.stop();
-        }
+        else if (!lift_returning)
+            lift.stop();
 
         // Intake: A in, B out. Buttons override intake mode while held.
         if (Controller.ButtonA.pressing())
